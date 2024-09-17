@@ -20,7 +20,7 @@ add_executable(PocketPico
 
 pico_generate_pio_header(PocketPico ${CMAKE_CURRENT_LIST_DIR}/ext/i2s/audio_i2s.pio)
 
-target_include_directories(PocketPico PRIVATE inc ext/peanut-gb ext/minigb_apu ext/i2s)
+target_include_directories(PocketPico PRIVATE inc ext/hedley ext/peanut-gb ext/minigb_apu ext/i2s)
 
 target_link_libraries(PocketPico
         FatFs_SPI

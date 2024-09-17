@@ -4,3 +4,6 @@
 [submodule "ext/peanut-gb"]
 	path = ext/peanut-gb
 	url = https://github.com/deltabeard/Peanut-GB.git
+[submodule "ext/hedley"]
+	path = ext/hedley
+	url = https://github.com/nemequ/hedley.git
