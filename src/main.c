@@ -1,5 +1,6 @@
 /**
  * Copyright (C) 2022 by Mahyar Koshkouei <mk@deltabeard.com>
+ * Copyright (C) 2024 by Vlastimil Slintak <slintak@uart.cz>
  * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted.
@@ -160,7 +161,7 @@ void mk_ili9225_set_cs(bool state)
 
 void mk_ili9225_set_led(bool state)
 {
-	gpio_put(GPIO_LED, state);
+	gpio_put(GPIO_LED, !state);
 }
 
 void mk_ili9225_spi_write16(const uint16_t *halfwords, size_t len)
