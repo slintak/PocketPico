@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.13...3.23)
 
+set(PICO_SDK_PATH ../ext/pico-sdk)
 include(pico_sdk_import.cmake)
 
 project(RP2040_GB C CXX ASM)
@@ -19,12 +20,12 @@ add_executable(RP2040_GB
 
 pico_generate_pio_header(RP2040_GB ${CMAKE_CURRENT_LIST_DIR}/ext/i2s/audio_i2s.pio)
 
-target_include_directories(RP2040_GB PRIVATE inc ext/minigb_apu ext/i2s)
+target_include_directories(RP2040_GB PRIVATE inc ext/peanut-gb ext/minigb_apu ext/i2s)
 
 target_link_libraries(RP2040_GB
         FatFs_SPI
         pico_stdlib pico_stdio pico_bootrom pico_multicore pico_stdio  pico_multicore
-        hardware_clocks hardware_pio hardware_vreg hardware_pio
+        hardware_clocks hardware_pio hardware_vreg hardware_pio hardware_flash
         hardware_sync hardware_pll hardware_spi hardware_irq hardware_dma
         pico_binary_info)
 target_compile_definitions(RP2040_GB PRIVATE
