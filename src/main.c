@@ -60,7 +60,6 @@
 /* Project headers */
 #include "hedley.h"
 #include "minigb_apu.h"
-#include "peanut_gb.h"
 #include "mk_ili9225.h"
 #include "sdcard.h"
 #include "i2s.h"
@@ -90,7 +89,16 @@
  * 16 bits for the left channel + 16 bits for the right channel in stereo interleaved format)
  * This is intended to be played at AUDIO_SAMPLE_RATE Hz
  */
-uint16_t *stream;
+int16_t *stream;
+struct minigb_apu_ctx apu_ctx = {0};
+
+#define audio_read(a)      audio_read(&apu_ctx, (a))
+#define audio_write(a, v)  audio_write(&apu_ctx, (a), (v));
+#include "peanut_gb.h"
+#undef audio_read
+#undef audio_write
+#else
+#include "peanut_gb.h"
 #endif
 
 /** Definition of ROM data
@@ -631,9 +639,9 @@ int main(void)
 
 #if ENABLE_SOUND
 	// Allocate memory for the stream buffer
-	stream=malloc(AUDIO_BUFFER_SIZE_BYTES);
+	stream=malloc(AUDIO_SAMPLES_TOTAL * sizeof(int16_t));
     assert(stream!=NULL);
-    memset(stream,0,AUDIO_BUFFER_SIZE_BYTES);  // Zero out the stream buffer
+    memset(stream,0, AUDIO_SAMPLES_TOTAL * sizeof(int16_t));  // Zero out the stream buffer
 	
 	// Initialize I2S sound driver
 	i2s_config_t i2s_config = i2s_get_default_config();
@@ -682,7 +690,7 @@ while(true)
 
 #if ENABLE_SOUND
 	// Initialize audio emulation
-	audio_init();
+	audio_init(&apu_ctx);
 	
 	putstdio("AUDIO ");
 #endif
@@ -709,7 +717,7 @@ while(true)
 		frames++;
 #if ENABLE_SOUND
 		if(!gb.direct.frame_skip) {
-			audio_callback(NULL, stream, AUDIO_BUFFER_SIZE_BYTES);
+			audio_callback(&apu_ctx, stream);
 			i2s_dma_write(&i2s_config, stream);
 		}
 #endif
