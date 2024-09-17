@@ -647,7 +647,7 @@ int main(void)
 	i2s_config_t i2s_config = i2s_get_default_config();
 	i2s_config.sample_freq=AUDIO_SAMPLE_RATE;
 	i2s_config.dma_trans_count =AUDIO_SAMPLES;
-	i2s_volume(&i2s_config,2);
+	i2s_volume(&i2s_config, 4);
 	i2s_init(&i2s_config);
 #endif
 
