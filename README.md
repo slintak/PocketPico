@@ -11,6 +11,11 @@ The [YouMakeTech fork](https://github.com/YouMakeTech/Pico-GB) includes these ch
 * SD card support (store roms and save games) + game selection menu
 * automatic color palette selection for some games (emulation of Game Boy Color Bootstrap ROM) + manual color palette selection
 
+I made these changes:
+* include `pico-sdk`, `peanut-gb`, `minigb_apu` and `hedley` as Git submodules
+* use latest versions (from master branch) of the `peanut-gb` and `minigb_apu`
+* use 32.768 kHz sample rate for audio (default value for latest `minigb_apu`)
+
 PocketPico is a 3D-printed Game Boy emulator for a custom made PCB with Raspberry Pi RP2040.
 
 # Hardware
@@ -57,7 +62,7 @@ $ make configure
 $ make build
 ```
 
-The firmware is located in `./build/PocketPico.bin` and `./build/PocketPici.uf2`. Flashing firmware into the hardware requires [Raspberry Pi Debug Probe](https://www.raspberrypi.com/products/debug-probe/).
+The firmware is located in `./build/PocketPico.bin` and `./build/PocketPico.uf2`. Flashing firmware during the development requires [Raspberry Pi Debug Probe](https://www.raspberrypi.com/products/debug-probe/).
 
 ```
 $ pyocd flash -t rp2040 ./build/PocketPico.bin
