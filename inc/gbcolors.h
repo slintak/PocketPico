@@ -29,6 +29,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "debug.h"
+
 #define NUMBER_OF_MANUAL_PALETTES 13
 #define PALETTE_SIZE_IN_BYTES (3 * 4 * sizeof(uint16_t))
 
@@ -46,7 +48,7 @@ typedef uint16_t palette_t[3][4];
  */
 void get_colour_palette(palette_t selected_palette,uint8_t table_entry,uint8_t shuffling_flags)
 {
-	printf("I get_colour_palette(table_entry=0x%02X,shuffling_flags=0x%02X)\n",
+	DBG_INFO("I get_colour_palette(table_entry=0x%02X,shuffling_flags=0x%02X)\n",
 		table_entry,
 		shuffling_flags);
 	if(table_entry==0x00 && shuffling_flags==0x01)
@@ -571,7 +573,7 @@ void get_colour_palette(palette_t selected_palette,uint8_t table_entry,uint8_t s
 		return;
 	}
 	/* default palette */
-	printf("E get_colour_palette: No palette found for table_entry=0x%02X shuffling_flags=0x%02X\n",
+	DBG_INFO("E get_colour_palette: No palette found for table_entry=0x%02X shuffling_flags=0x%02X\n",
 		table_entry,
 		shuffling_flags);
 	/* Game Boy DMG palette (4 shades of green) */
@@ -600,7 +602,7 @@ void get_colour_palette(palette_t selected_palette,uint8_t table_entry,uint8_t s
 void auto_assign_palette(uint16_t palette[3][4], uint8_t game_checksum, const char *game_title)
 {
 	char disambiguation_character=game_title[3]; /* e.g. 'METROID' -> R */
-	printf("I auto_assign_palette(0x%02X,%s)\n", game_checksum,game_title);
+	DBG_INFO("I auto_assign_palette(0x%02X,%s)\n", game_checksum,game_title);
 	switch(game_checksum)
 	{
 		case 0x00:
@@ -1239,7 +1241,7 @@ void auto_assign_palette(uint16_t palette[3][4], uint8_t game_checksum, const ch
 		}
 		default:
 		{
-			printf("E auto_assign_palette: No palette found for checksum 0x%02X.\n", game_checksum);
+			DBG_INFO("E auto_assign_palette: No palette found for checksum 0x%02X.\n", game_checksum);
 			/* Original Game Boy DMG color palette (monochrome 4-shades of green!) */
  			get_colour_palette(palette,0xFF,0xFF);
 			break;
@@ -1263,7 +1265,7 @@ void auto_assign_palette(uint16_t palette[3][4], uint8_t game_checksum, const ch
  */
 void manual_assign_palette(palette_t palette, uint8_t selection)
 {
-	printf("I manual_assign_palette(%d)\n", selection);
+	DBG_INFO("I manual_assign_palette(%d)\n", selection);
 	switch(selection)
 	{
 		case 0:

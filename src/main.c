@@ -21,6 +21,8 @@
 #define PEANUT_GB_HIGH_LCD_ACCURACY 1
 #define PEANUT_GB_USE_BIOS 0
 
+#define ENABLE_DEBUG 0
+
 /* Use DMA for all drawing to LCD. Benefits aren't fully realised at the moment
  * due to busy loops waiting for DMA completion. */
 #define USE_DMA		0
@@ -37,7 +39,6 @@
 #define DMG_CLOCK_FREQ_REDUCED (DMG_CLOCK_FREQ/VSYNC_REDUCTION_FACTOR)
 
 /* C Headers */
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -51,13 +52,13 @@
 #include <hardware/timer.h>
 #include <hardware/vreg.h>
 #include <pico/bootrom.h>
-#include <pico/stdio.h>
 #include <pico/stdlib.h>
 #include <pico/multicore.h>
 #include <sys/unistd.h>
 #include <hardware/irq.h>
 
 /* Project headers */
+#include "debug.h"
 #include "hedley.h"
 #include "minigb_apu.h"
 #include "mk_ili9225.h"
@@ -222,7 +223,7 @@ void gb_error(struct gb_s *gb, const enum gb_error_e gb_err, const uint16_t addr
 			"INVALID READ",
 			"INVALID WRITE"
 		};
-	printf("Error %d occurred: %s at %04X\n.\n", gb_err, gb_err_str[gb_err], addr);
+	DBG_INFO("Error %d occurred: %s at %04X\n.\n", gb_err, gb_err_str[gb_err], addr);
 //	abort();
 #endif
 }
@@ -325,7 +326,7 @@ void read_cart_ram_file(struct gb_s *gb) {
 		sd_card_t *pSD=sd_get_by_num(0);
 		FRESULT fr=f_mount(&pSD->fatfs,pSD->pcName,1);
 		if (FR_OK!=fr) {
-			printf("E f_mount error: %s (%d)\n",FRESULT_str(fr),fr);
+			DBG_INFO("E f_mount error: %s (%d)\n",FRESULT_str(fr),fr);
 			return;
 		}
 
@@ -334,16 +335,16 @@ void read_cart_ram_file(struct gb_s *gb) {
 		if (fr==FR_OK) {
 			f_read(&fil,ram,f_size(&fil),&br);
 		} else {
-			printf("E f_open(%s) error: %s (%d)\n",filename,FRESULT_str(fr),fr);
+			DBG_INFO("E f_open(%s) error: %s (%d)\n",filename,FRESULT_str(fr),fr);
 		}
 		
 		fr=f_close(&fil);
 		if(fr!=FR_OK) {
-			printf("E f_close error: %s (%d)\n", FRESULT_str(fr), fr);
+			DBG_INFO("E f_close error: %s (%d)\n", FRESULT_str(fr), fr);
 		}
 		f_unmount(pSD->pcName);
 	}
-	printf("I read_cart_ram_file(%s) COMPLETE (%lu bytes)\n",filename,save_size);
+	DBG_INFO("I read_cart_ram_file(%s) COMPLETE (%lu bytes)\n",filename,save_size);
 }
 
 /**
@@ -360,7 +361,7 @@ void write_cart_ram_file(struct gb_s *gb) {
 		sd_card_t *pSD=sd_get_by_num(0);
 		FRESULT fr=f_mount(&pSD->fatfs,pSD->pcName,1);
 		if (FR_OK!=fr) {
-			printf("E f_mount error: %s (%d)\n",FRESULT_str(fr),fr);
+			DBG_INFO("E f_mount error: %s (%d)\n",FRESULT_str(fr),fr);
 			return;
 		}
 
@@ -369,16 +370,16 @@ void write_cart_ram_file(struct gb_s *gb) {
 		if (fr==FR_OK) {
 			f_write(&fil,ram,save_size,&bw);
 		} else {
-			printf("E f_open(%s) error: %s (%d)\n",filename,FRESULT_str(fr),fr);
+			DBG_INFO("E f_open(%s) error: %s (%d)\n",filename,FRESULT_str(fr),fr);
 		}
 		
 		fr=f_close(&fil);
 		if(fr!=FR_OK) {
-			printf("E f_close error: %s (%d)\n", FRESULT_str(fr), fr);
+			DBG_INFO("E f_close error: %s (%d)\n", FRESULT_str(fr), fr);
 		}
 		f_unmount(pSD->pcName);
 	}
-	printf("I write_cart_ram_file(%s) COMPLETE (%lu bytes)\n",filename,save_size);
+	DBG_INFO("I write_cart_ram_file(%s) COMPLETE (%lu bytes)\n",filename,save_size);
 }
 
 /**
@@ -391,7 +392,7 @@ void load_cart_rom_file(char *filename) {
 	sd_card_t *pSD=sd_get_by_num(0);
 	FRESULT fr=f_mount(&pSD->fatfs,pSD->pcName,1);
 	if (FR_OK!=fr) {
-		printf("E f_mount error: %s (%d)\n",FRESULT_str(fr),fr);
+		DBG_INFO("E f_mount error: %s (%d)\n",FRESULT_str(fr),fr);
 		return;
 	}
 	FIL fil;
@@ -402,13 +403,13 @@ void load_cart_rom_file(char *filename) {
 			f_read(&fil,buffer,sizeof buffer,&br);
 			if(br==0) break; /* end of file */
 
-			printf("I Erasing target region...\n");
+			DBG_INFO("I Erasing target region...\n");
 			flash_range_erase(flash_target_offset,FLASH_SECTOR_SIZE);
-			printf("I Programming target region...\n");
+			DBG_INFO("I Programming target region...\n");
 			flash_range_program(flash_target_offset,buffer,FLASH_SECTOR_SIZE);
 			
 			/* Read back target region and check programming */
-			printf("I Done. Reading back target region...\n");
+			DBG_INFO("I Done. Reading back target region...\n");
 			for(uint32_t i=0;i<FLASH_SECTOR_SIZE;i++) {
 				if(rom[flash_target_offset+i]!=buffer[i]) {
 					mismatch=true;
@@ -419,21 +420,21 @@ void load_cart_rom_file(char *filename) {
 			flash_target_offset+=FLASH_SECTOR_SIZE;
 		}
 		if(mismatch) {
-	        printf("I Programming successful!\n");
+	        DBG_INFO("I Programming successful!\n");
 		} else {
-			printf("E Programming failed!\n");
+			DBG_INFO("E Programming failed!\n");
 		}
 	} else {
-		printf("E f_open(%s) error: %s (%d)\n",filename,FRESULT_str(fr),fr);
+		DBG_INFO("E f_open(%s) error: %s (%d)\n",filename,FRESULT_str(fr),fr);
 	}
 	
 	fr=f_close(&fil);
 	if(fr!=FR_OK) {
-		printf("E f_close error: %s (%d)\n", FRESULT_str(fr), fr);
+		DBG_INFO("E f_close error: %s (%d)\n", FRESULT_str(fr), fr);
 	}
 	f_unmount(pSD->pcName);
 
-	printf("I load_cart_rom_file(%s) COMPLETE (%lu bytes)\n",filename,br);
+	DBG_INFO("I load_cart_rom_file(%s) COMPLETE (%lu bytes)\n",filename,br);
 }
 
 /**
@@ -447,7 +448,7 @@ uint16_t rom_file_selector_display_page(char filename[22][256],uint16_t num_page
 
     fr=f_mount(&pSD->fatfs,pSD->pcName,1);
     if (FR_OK!=fr) {
-        printf("E f_mount error: %s (%d)\n",FRESULT_str(fr),fr);
+        DBG_INFO("E f_mount error: %s (%d)\n",FRESULT_str(fr),fr);
         return 0;
     }
 
@@ -587,11 +588,10 @@ int main(void)
 		sleep_ms(2);
 	}
 
-	/* Initialise USB serial connection for debugging. */
-	stdio_init_all();
+	DBG_INIT();
+	DBG_INFO("INIT: ");
+
 	time_init();
-	// sleep_ms(5000);
-	putstdio("INIT: ");
 
 	/* Initialise GPIO pins. */
 	gpio_set_function(GPIO_UP, GPIO_FUNC_SIO);
@@ -669,11 +669,11 @@ while(true)
 	memcpy(rom_bank0, rom, sizeof(rom_bank0));
 	ret = gb_init(&gb, &gb_rom_read, &gb_cart_ram_read,
 		      &gb_cart_ram_write, &gb_error, NULL);
-	putstdio("GB ");
+	DBG_INFO("GB ");
 
 	if(ret != GB_INIT_NO_ERROR)
 	{
-		printf("Error: %d\n", ret);
+		DBG_INFO("Error: %d\n", ret);
 		goto out;
 	}
 
@@ -685,17 +685,17 @@ while(true)
 	gb_init_lcd(&gb, &lcd_draw_line);
 
 	/* Start Core1, which processes requests to the LCD. */
-	putstdio("CORE1 ");
+	DBG_INFO("CORE1 ");
 	multicore_launch_core1(main_core1);
 	
-	putstdio("LCD ");
+	DBG_INFO("LCD ");
 #endif
 
 #if ENABLE_SOUND
 	// Initialize audio emulation
 	audio_init(&apu_ctx);
 	
-	putstdio("AUDIO ");
+	DBG_INFO("AUDIO ");
 #endif
 
 #if ENABLE_SDCARD
@@ -703,7 +703,7 @@ while(true)
 	read_cart_ram_file(&gb);
 #endif
 
-	putstdio("\n> ");
+	DBG_INFO("\n> ");
 	uint_fast32_t frames = 0;
 	uint64_t start_time = time_us_64();
 	while(1)
@@ -779,10 +779,11 @@ while(true)
 			if(!gb.direct.joypad_bits.a && prev_joypad_bits.a) {
 				/* select + A: enable/disable frame-skip => fast-forward */
 				gb.direct.frame_skip=!gb.direct.frame_skip;
-				printf("I gb.direct.frame_skip = %d\n",gb.direct.frame_skip);
+				DBG_INFO("I gb.direct.frame_skip = %d\n",gb.direct.frame_skip);
 			}
 		}
 
+#if ENABLE_DEBUG
 		/* Serial monitor commands */ 
 		input = getchar_timeout_us(0);
 		if(input == PICO_ERROR_TIMEOUT)
@@ -805,7 +806,7 @@ while(true)
 			freq++;
 			freq &= 0x0F;
 			mk_ili9225_set_drive_freq(freq);
-			printf("Freq %u\n", freq);
+			DBG_INFO("Freq %u\n", freq);
 			break;
 #endif
 		case 'c':
@@ -837,7 +838,7 @@ while(true)
 			end_time = time_us_64();
 			diff = end_time-start_time;
 			fps = ((uint64_t)frames*1000*1000)/diff;
-			printf("Frames: %u\n"
+			DBG_INFO("Frames: %u\n"
 				"Time: %lu us\n"
 				"FPS: %lu\n",
 				frames, diff, fps);
@@ -903,9 +904,12 @@ while(true)
 		default:
 			break;
 		}
+#endif /* ENABLE_DEBUG */
 	}
+
 out:
-	puts("\nEmulation Ended");
+	DBG_INFO("\nEmulation Ended");
+
 	/* stop lcd task running on core 1 */
 	multicore_reset_core1(); 
 
