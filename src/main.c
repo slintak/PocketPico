@@ -459,7 +459,7 @@ uint16_t rom_file_selector_display_page(char filename[22][256],uint16_t num_page
 
     /* search *.gb files */
     uint16_t num_file=0;
-    fr=f_findfirst(&dj, &fno, "", "*.gb");
+    fr=f_findfirst(&dj, &fno, ".", "?*.gb");
 
     /* skip the first N pages */
     if(num_page>0) {
