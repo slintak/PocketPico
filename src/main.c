@@ -230,16 +230,8 @@ void gb_error(struct gb_s *gb, const enum gb_error_e gb_err, const uint16_t addr
 #if ENABLE_LCD 
 void core1_lcd_draw_line(const uint_fast8_t line)
 {
-	static uint16_t fb[LCD_WIDTH];
-
-	for(unsigned int x = 0; x < LCD_WIDTH; x++)
-	{
-		fb[x] = palette[(pixels_buffer[x] & LCD_PALETTE_ALL) >> 4]
-				[pixels_buffer[x] & 3];
-	}
-
 	mk_ili9225_set_x(line + 16);
-	mk_ili9225_write_pixels(fb, LCD_WIDTH);
+	mk_ili9225_write_pixels(pixels_buffer, LCD_WIDTH);
 	__atomic_store_n(&lcd_line_busy, 0, __ATOMIC_SEQ_CST);
 }
 
@@ -294,8 +286,21 @@ void lcd_draw_line(struct gb_s *gb, const uint8_t pixels[LCD_WIDTH],
 	while(__atomic_load_n(&lcd_line_busy, __ATOMIC_SEQ_CST))
 		tight_loop_contents();
 
-	memcpy(pixels_buffer, pixels, LCD_WIDTH);
-	
+	#if PEANUT_FULL_GBC_SUPPORT
+    if (gb->cgb.cgbMode) {
+    	for (unsigned int x = 0; x < LCD_WIDTH; x++) {
+            pixels_buffer[x] = gb->cgb.fixPalette[pixels[x]] << 1;
+        }
+    } else {
+    #endif
+    	for (unsigned int x = 0; x < LCD_WIDTH; x++) {
+	    	pixels_buffer[x] = palette[(pixels[x] & LCD_PALETTE_ALL) >> 4][pixels[x] & 3];
+	    }
+	#if PEANUT_FULL_GBC_SUPPORT
+	}
+	#endif
+
+
 	/* Populate command. */
 	cmd.cmd = CORE_CMD_LCD_LINE;
 	cmd.data = line;
