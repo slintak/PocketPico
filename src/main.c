@@ -525,6 +525,8 @@ void rom_file_selector() {
         }
         if(!a | !b) {
             /* copy the rom from the SD card to flash and start the game */
+            mk_ili9225_fill(0x0000);
+            mk_ili9225_text("Loading game", 55, 80, 0xFFFF, 0x0000);
             load_cart_rom_file(filename[selected]);
             break;
         }
