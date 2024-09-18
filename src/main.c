@@ -147,9 +147,7 @@ union core_cmd {
 };
 
 /* Pixel data is stored in here. */
-static uint8_t pixels_buffer[LCD_WIDTH];
-
-#define putstdio(x) write(1, x, strlen(x))
+static uint16_t pixels_buffer[LCD_WIDTH];
 
 /* Functions required for communication with the ILI9225. */
 void mk_ili9225_set_rst(bool state)
