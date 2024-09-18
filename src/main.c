@@ -472,8 +472,12 @@ uint16_t rom_file_selector_display_page(char filename[22][256],uint16_t num_page
     /* store the filenames of this page */
     num_file=0;
     while(num_file<22 && fr == FR_OK && fno.fname[0]) {
-        strcpy(filename[num_file],fno.fname);
-        num_file++;
+        if(fno.fname[0] != '.') {
+            /* Skip any file starting with dot. These are hidden files. */
+            strcpy(filename[num_file],fno.fname);
+            num_file++;
+        }
+
         fr=f_findnext(&dj, &fno);
     }
     f_closedir(&dj);
