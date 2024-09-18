@@ -37,7 +37,7 @@ typedef struct i2s_config
     uint16_t channel_count; 
     uint8_t  data_pin;
     uint8_t  clock_pin_base;
-    PIO	     pio;
+    PIO      pio;
     uint8_t  sm; 
     uint8_t  dma_channel;
     uint16_t dma_trans_count;

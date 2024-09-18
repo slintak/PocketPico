@@ -29,31 +29,31 @@
 #define SCREEN_SIZE_Y 220u
 
 typedef enum {
-	ILI9225_COLOR_MODE_FULL = 0,
-	ILI9225_COLOR_MODE_8COLOR = 1
+    ILI9225_COLOR_MODE_FULL = 0,
+    ILI9225_COLOR_MODE_8COLOR = 1
 } ili9225_color_mode_e;
 
 /**
  * Controls the reset pin of the ILI9225.
- * \param state	Set to 0 on low output, else high.
+ * \param state Set to 0 on low output, else high.
  */
 extern void mk_ili9225_set_rst(bool state);
 
 /**
  * Controls state of RS pin.
- * \param state	Set to 0 on low output, else high.
+ * \param state Set to 0 on low output, else high.
  */
 extern void mk_ili9225_set_rs(bool state);
 
 /**
  * Controls state of CS pin.
- * \param state	Set to 0 on low output, else high.
+ * \param state Set to 0 on low output, else high.
  */
 extern void mk_ili9225_set_cs(bool state);
 
 /**
  * Controls state of LED pin.
- * \param state	Set to 0 on low output, else high.
+ * \param state Set to 0 on low output, else high.
  */
 extern void mk_ili9225_set_led(bool state);
 
@@ -102,7 +102,7 @@ unsigned mk_ili9225_read_driving_line(void);
  * \param vert_end
  */
 void mk_ili9225_set_window(uint16_t hor_start, uint16_t hor_end,
-	uint16_t vert_start, uint16_t vert_end);
+    uint16_t vert_start, uint16_t vert_end);
 
 /**
  * Set address pointer in GRAM. Must be within window.
