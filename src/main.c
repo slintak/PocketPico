@@ -380,6 +380,74 @@ void write_cart_ram_file(struct gb_s *gb) {
         f_unmount(pSD->pcName);
     }
     DBG_INFO("I write_cart_ram_file(%s) COMPLETE (%lu bytes)\n",filename,save_size);
+
+/**
+ * Read a save file with internal GB enumalor state from the SD card.
+ * This state will allow to resume game from the last run.
+ */
+void read_gb_emulator_state(struct gb_s *gb) {
+    char filename[16];
+    char filename_state[32];
+    UINT br = 0;
+    FIL fil;
+
+    sd_card_t *sd = sd_get_by_num(0);
+    FRESULT fr = f_mount(&sd->fatfs, sd->pcName, 1);
+
+    gb_get_rom_name(gb, filename);
+    sprintf(filename_state, "%s_state.bin", filename);
+    fr = f_open(&fil, filename_state, FA_READ);
+
+    if(fr == FR_OK) {
+        f_read(&fil, (uint8_t *)gb, sizeof(struct gb_s), &br);
+    } else {
+        DBG_INFO("W read_gb_emulator_state(%s): SKIPPED (no previous state)\n", filename_state);
+        goto finish;
+    }
+
+    DBG_INFO("I read_gb_emulator_state(%s) COMPLETED (%lu bytes)\n", filename_state, br);
+
+finish:
+    fr = f_close(&fil);
+    if(fr != FR_OK) {
+        DBG_INFO("W f_close error: %s (%d)\n", FRESULT_str(fr), fr);
+    }
+
+    f_unmount(sd->pcName);
+}
+
+/**
+ * Write a save file with internal GB enumalor state to the SD card.
+ * When loaded, this state will allow to resume game from the last run.
+ */
+void write_gb_emulator_state(struct gb_s *gb) {
+    char filename[16];
+    char filename_state[32];
+    UINT bw;
+    FIL fil;
+
+    sd_card_t *sd = sd_get_by_num(0);
+    FRESULT fr = f_mount(&sd->fatfs, sd->pcName,1);
+
+    gb_get_rom_name(gb, filename);
+    sprintf(filename_state, "%s_state.bin", filename);
+    fr = f_open(&fil, filename_state, FA_CREATE_ALWAYS | FA_WRITE);
+
+    if(fr == FR_OK) {
+        f_write(&fil, (uint8_t *)gb, sizeof(struct gb_s), &bw);
+    } else {
+        DBG_INFO("E write_gb_emulator_state(%s) FAILED (%s)\n", filename_state, FRESULT_str(fr));
+        goto finish;
+    }
+
+    DBG_INFO("I write_gb_emulator_state(%s) COMPLETED (%lu bytes)\n",filename, bw);
+
+finish:
+    fr = f_close(&fil);
+    if(fr != FR_OK) {
+        DBG_INFO("E f_close error: %s (%d)\n", FRESULT_str(fr), fr);
+    }
+    f_unmount(sd->pcName);
 }
 
 /**
@@ -683,6 +751,11 @@ while(true)
         goto out;
     }
 
+#if ENABLE_SDCARD
+    /* Try to load last saved emulator state for this game. */
+    read_gb_emulator_state(&gb);
+#endif
+
     /* Automatically assign a colour palette to the game */
     char rom_title[16];
     auto_assign_palette(palette, gb_colour_hash(&gb),gb_get_rom_name(&gb,rom_title));
@@ -779,6 +852,8 @@ while(true)
                 /* select + start: save ram and resets to the game selection menu */
 #if ENABLE_SDCARD
                 write_cart_ram_file(&gb);
+                /* Try to save the emulator state for this game. */
+                write_gb_emulator_state(&gb);
 #endif
                 goto out;
             }
