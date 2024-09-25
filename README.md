@@ -15,6 +15,8 @@ I made these changes:
 * include `pico-sdk`, `peanut-gb`, `minigb_apu` and `hedley` as Git submodules
 * use latest versions (from master branch) of the `peanut-gb` and `minigb_apu`
 * use 32.768 kHz sample rate for audio (default value for latest `minigb_apu`)
+* drawing to LCD is offloaded to DMA and PIO, second MCU core is no longer needed
+* moved audio processing to the second MCU core
 
 # Hardware
 
