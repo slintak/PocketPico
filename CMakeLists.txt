@@ -10,10 +10,10 @@ set(CMAKE_CXX_STANDARD 17)
 pico_sdk_init()
 
 add_subdirectory(ext/FatFs_SPI build)
+add_subdirectory(ext/ili9225)
 
 add_executable(PocketPico
         src/main.c
-        src/mk_ili9225.c
         ext/minigb_apu/minigb_apu.c
         ext/i2s/i2s.c
 )
@@ -24,10 +24,10 @@ target_include_directories(PocketPico PRIVATE inc ext/hedley ext/peanut-gb ext/m
 
 target_link_libraries(PocketPico
         FatFs_SPI
-        pico_stdlib pico_stdio pico_bootrom pico_multicore pico_stdio  pico_multicore
+        pico_stdlib pico_stdio pico_bootrom pico_multicore pico_multicore
         hardware_clocks hardware_pio hardware_vreg hardware_pio hardware_flash
         hardware_sync hardware_pll hardware_spi hardware_irq hardware_dma
-        pico_binary_info)
+        pico_binary_info ili9225_lcd)
 target_compile_definitions(PocketPico PRIVATE
         PARAM_ASSERTIONS_DISABLE_ALL=1
         PICO_ENTER_USB_BOOT_ON_EXIT=1
@@ -46,7 +46,6 @@ function(pico_add_verbose_dis_output TARGET)
 endfunction()
 
 pico_set_binary_type(PocketPico copy_to_ram)
-#pico_set_binary_type(PocketPico no_flash)
 pico_enable_stdio_usb(PocketPico 1)
 pico_enable_stdio_uart(PocketPico 0)
 pico_add_verbose_dis_output(PocketPico)

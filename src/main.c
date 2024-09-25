@@ -23,10 +23,6 @@
 
 #define ENABLE_DEBUG 0
 
-/* Use DMA for all drawing to LCD. Benefits aren't fully realised at the moment
- * due to busy loops waiting for DMA completion. */
-#define USE_DMA     0
-
 /**
  * Reducing VSYNC calculation to lower multiple.
  * When setting a clock IRQ to DMG_CLOCK_FREQ_REDUCED, count to
@@ -61,7 +57,8 @@
 #include "debug.h"
 #include "hedley.h"
 #include "minigb_apu.h"
-#include "mk_ili9225.h"
+#include "ili9225_lcd.h"
+#include "ili9225_font.h"
 #include "sdcard.h"
 #include "i2s.h"
 #include "gbcolors.h"
@@ -83,6 +80,15 @@
 #define GPIO_LED    22
 
 #if ENABLE_SOUND
+
+typedef enum {
+    AUDIO_CMD_IDLE = 0,
+    AUDIO_CMD_PLAYBACK,
+    AUDIO_CMD_VOLUME_UP,
+    AUDIO_CMD_VOLUME_DOWN,
+    AUDIO_CMD_INVALID
+} audio_commands_e;
+
 /**
  * Global variables for audio task
  * stream contains N=AUDIO_SAMPLES samples
@@ -128,58 +134,8 @@ static struct
     unsigned down   : 1;
 } prev_joypad_bits;
 
-/* Multicore command structure. */
-union core_cmd {
-    struct {
-    /* Does nothing. */
-#define CORE_CMD_NOP        0
-    /* Set line "data" on the LCD. Pixel data is in pixels_buffer. */
-#define CORE_CMD_LCD_LINE   1
-    /* Control idle mode on the LCD. Limits colours to 2 bits. */
-#define CORE_CMD_IDLE_SET   2
-    /* Set a specific pixel. For debugging. */
-#define CORE_CMD_SET_PIXEL  3
-    uint8_t cmd;
-    uint8_t unused1;
-    uint8_t unused2;
-    uint8_t data;
-    };
-    uint32_t full;
-};
-
 /* Pixel data is stored in here. */
 static uint16_t pixels_buffer[LCD_WIDTH];
-
-/* Functions required for communication with the ILI9225. */
-void mk_ili9225_set_rst(bool state)
-{
-    gpio_put(GPIO_RST, state);
-}
-
-void mk_ili9225_set_rs(bool state)
-{
-    gpio_put(GPIO_RS, state);
-}
-
-void mk_ili9225_set_cs(bool state)
-{
-    gpio_put(GPIO_CS, state);
-}
-
-void mk_ili9225_set_led(bool state)
-{
-    gpio_put(GPIO_LED, !state);
-}
-
-void mk_ili9225_spi_write16(const uint16_t *halfwords, size_t len)
-{
-    spi_write16_blocking(spi0, halfwords, len);
-}
-
-void mk_ili9225_delay_ms(unsigned ms)
-{
-    sleep_ms(ms);
-}
 
 /**
  * Returns a byte from the ROM file at the given address.
@@ -229,64 +185,9 @@ void gb_error(struct gb_s *gb, const enum gb_error_e gb_err, const uint16_t addr
 }
 
 #if ENABLE_LCD
-void core1_lcd_draw_line(const uint_fast8_t line)
-{
-    mk_ili9225_set_x(line + 16);
-    mk_ili9225_write_pixels(pixels_buffer, LCD_WIDTH);
-    __atomic_store_n(&lcd_line_busy, 0, __ATOMIC_SEQ_CST);
-}
-
-_Noreturn
-void main_core1(void)
-{
-    union core_cmd cmd;
-
-    /* Initialise and control LCD on core 1. */
-    mk_ili9225_init();
-
-    /* Clear LCD screen. */
-    mk_ili9225_fill(0x0000);
-
-    /* Set LCD window to DMG size. */
-    mk_ili9225_fill_rect(31,16,LCD_WIDTH,LCD_HEIGHT,0x0000);
-
-    // Sleep used for debugging LCD window.
-    //sleep_ms(1000);
-
-    /* Handle commands coming from core0. */
-    while(1)
-    {
-        cmd.full = multicore_fifo_pop_blocking();
-        switch(cmd.cmd)
-        {
-        case CORE_CMD_LCD_LINE:
-            core1_lcd_draw_line(cmd.data);
-            break;
-
-        case CORE_CMD_IDLE_SET:
-            mk_ili9225_display_control(true, cmd.data);
-            break;
-
-        case CORE_CMD_NOP:
-        default:
-            break;
-        }
-    }
-
-    HEDLEY_UNREACHABLE();
-}
-#endif
-
-#if ENABLE_LCD
 void lcd_draw_line(struct gb_s *gb, const uint8_t pixels[LCD_WIDTH],
            const uint_fast8_t line)
 {
-    union core_cmd cmd;
-
-    /* Wait until previous line is sent. */
-    while(__atomic_load_n(&lcd_line_busy, __ATOMIC_SEQ_CST))
-        tight_loop_contents();
-
     #if PEANUT_FULL_GBC_SUPPORT
     if (gb->cgb.cgbMode) {
         for (unsigned int x = 0; x < LCD_WIDTH; x++) {
@@ -301,13 +202,15 @@ void lcd_draw_line(struct gb_s *gb, const uint8_t pixels[LCD_WIDTH],
     }
     #endif
 
+    ili9225_write_pixels_wait();
+    if(line == 0) {
+        ili9225_write_pixels_start(30, 16);
+    } else if(line == LCD_HEIGHT) {
+        ili9225_write_pixels_end();
+    } else {
+        ili9225_write_pixels_chunk(pixels_buffer, LCD_WIDTH);
+    }
 
-    /* Populate command. */
-    cmd.cmd = CORE_CMD_LCD_LINE;
-    cmd.data = line;
-
-    __atomic_store_n(&lcd_line_busy, 1, __ATOMIC_SEQ_CST);
-    multicore_fifo_push_blocking(cmd.full);
 }
 #endif
 
@@ -558,9 +461,9 @@ uint16_t rom_file_selector_display_page(char filename[22][256],uint16_t num_page
     f_unmount(pSD->pcName);
 
     /* display *.gb rom files on screen */
-    mk_ili9225_fill(0x0000);
+    ili9225_fill(0x0000);
     for(uint8_t ifile=0;ifile<num_file;ifile++) {
-        mk_ili9225_text(filename[ifile],0,ifile*8,0xFFFF,0x0000);
+        ili9225_text(filename[ifile],0,ifile*8,0xFFFF,0x0000);
     }
     return num_file;
 }
@@ -580,7 +483,7 @@ void rom_file_selector() {
 
     /* select the first rom */
     uint8_t selected=0;
-    mk_ili9225_text(filename[selected],0,selected*8,0xFFFF,0xF800);
+    ili9225_text(filename[selected],0,selected*8,0xFFFF,0xF800);
 
     /* get user's input */
     bool up,down,left,right,a,b,select,start;
@@ -599,28 +502,28 @@ void rom_file_selector() {
         }
         if(!a | !b) {
             /* copy the rom from the SD card to flash and start the game */
-            mk_ili9225_fill(0x0000);
-            mk_ili9225_text("Loading game", 55, 80, 0xFFFF, 0x0000);
+            ili9225_fill(0x0000);
+            ili9225_text("Loading game", 55, 80, 0xFFFF, 0x0000);
             load_cart_rom_file(filename[selected]);
             break;
         }
         if(!down) {
             /* select the next rom */
-            mk_ili9225_text(filename[selected],0,selected*8,0xFFFF,0x0000);
+            ili9225_text(filename[selected],0,selected*8,0xFFFF,0x0000);
             selected++;
             if(selected>=num_file) selected=0;
-            mk_ili9225_text(filename[selected],0,selected*8,0xFFFF,0xF800);
+            ili9225_text(filename[selected],0,selected*8,0xFFFF,0xF800);
             sleep_ms(150);
         }
         if(!up) {
             /* select the previous rom */
-            mk_ili9225_text(filename[selected],0,selected*8,0xFFFF,0x0000);
+            ili9225_text(filename[selected],0,selected*8,0xFFFF,0x0000);
             if(selected==0) {
                 selected=num_file-1;
             } else {
                 selected--;
             }
-            mk_ili9225_text(filename[selected],0,selected*8,0xFFFF,0xF800);
+            ili9225_text(filename[selected],0,selected*8,0xFFFF,0xF800);
             sleep_ms(150);
         }
         if(!right) {
@@ -634,7 +537,7 @@ void rom_file_selector() {
             }
             /* select the first file */
             selected=0;
-            mk_ili9225_text(filename[selected],0,selected*8,0xFFFF,0xF800);
+            ili9225_text(filename[selected],0,selected*8,0xFFFF,0xF800);
             sleep_ms(150);
         }
         if((!left) && num_page>0) {
@@ -643,7 +546,7 @@ void rom_file_selector() {
             num_file=rom_file_selector_display_page(filename,num_page);
             /* select the first file */
             selected=0;
-            mk_ili9225_text(filename[selected],0,selected*8,0xFFFF,0xF800);
+            ili9225_text(filename[selected],0,selected*8,0xFFFF,0xF800);
             sleep_ms(150);
         }
         tight_loop_contents();
@@ -652,14 +555,59 @@ void rom_file_selector() {
 
 #endif
 
+#if ENABLE_SOUND
+void core1_audio(void) {
+    /* Allocate memory for the stream buffer */
+    stream = malloc(AUDIO_SAMPLES_TOTAL * sizeof(int16_t));
+    assert(stream != NULL);
+    memset(stream, 0, AUDIO_SAMPLES_TOTAL * sizeof(int16_t));
+
+    /* Initialize I2S sound driver (using PIO0) */
+    i2s_config_t i2s_config = i2s_get_default_config();
+    i2s_config.sample_freq = AUDIO_SAMPLE_RATE;
+    i2s_config.dma_trans_count = AUDIO_SAMPLES;
+    i2s_volume(&i2s_config, 4);
+    i2s_init(&i2s_config);
+
+    /* Initialize audio emulation. */
+    audio_init(&apu_ctx);
+
+    DBG_INFO("I Audio ready on core1.\n");
+
+    while(1) {
+        audio_commands_e cmd = multicore_fifo_pop_blocking_inline();
+        switch(cmd) {
+        case AUDIO_CMD_PLAYBACK:
+            audio_callback(&apu_ctx, stream);
+            i2s_dma_write(&i2s_config, stream);
+            break;
+
+        case AUDIO_CMD_VOLUME_UP:
+            i2s_increase_volume(&i2s_config);
+            break;
+
+        case AUDIO_CMD_VOLUME_DOWN:
+            i2s_decrease_volume(&i2s_config);
+            break;
+
+        default:
+            break;
+        }
+    }
+
+    HEDLEY_UNREACHABLE();
+}
+#endif
+
+
 int main(void)
 {
     static struct gb_s gb;
     enum gb_init_error_e ret;
 
-    /* Overclock. */
+    /* Overclock to 266 MHZ. */
     {
-        const unsigned vco = 1596*1000*1000;    /* 266MHz */
+        const unsigned vco = 1596 * 1000 * 1000;
         const unsigned div1 = 6, div2 = 1;
 
         vreg_set_voltage(VREG_VOLTAGE_1_15);
@@ -713,36 +661,22 @@ int main(void)
     gpio_pull_up(GPIO_SELECT);
     gpio_pull_up(GPIO_START);
 
-    /* Set SPI clock to use high frequency. */
-    clock_configure(clk_peri, 0,
-            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLK_SYS,
-            125 * 1000 * 1000, 125 * 1000 * 1000);
-    spi_init(spi0, 30*1000*1000);
-    spi_set_format(spi0, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
-
 #if ENABLE_SOUND
-    // Allocate memory for the stream buffer
-    stream=malloc(AUDIO_SAMPLES_TOTAL * sizeof(int16_t));
-    assert(stream!=NULL);
-    memset(stream,0, AUDIO_SAMPLES_TOTAL * sizeof(int16_t));  // Zero out the stream buffer
-
-    // Initialize I2S sound driver
-    i2s_config_t i2s_config = i2s_get_default_config();
-    i2s_config.sample_freq=AUDIO_SAMPLE_RATE;
-    i2s_config.dma_trans_count =AUDIO_SAMPLES;
-    i2s_volume(&i2s_config, 4);
-    i2s_init(&i2s_config);
+    multicore_launch_core1(core1_audio);
 #endif
 
-while(true)
-{
 #if ENABLE_LCD
+    ili9225_init();
+#endif
+
+while(true) {
+#if ENABLE_LCD
+    ili9225_set_window(0, ILI9225_SCREEN_WIDTH, 0, ILI9225_SCREEN_HEIGHT);
+#endif
+
 #if ENABLE_SDCARD
     /* ROM File selector */
-    mk_ili9225_init();
-    mk_ili9225_fill(0x0000);
     rom_file_selector();
-#endif
 #endif
 
     /* Initialise GB context. */
@@ -768,19 +702,14 @@ while(true)
 
 #if ENABLE_LCD
     gb_init_lcd(&gb, &lcd_draw_line);
-
-    /* Start Core1, which processes requests to the LCD. */
-    DBG_INFO("CORE1 ");
-    multicore_launch_core1(main_core1);
-
+    ili9225_fill(0x0000);
+    ili9225_set_window(
+        (ILI9225_SCREEN_WIDTH - LCD_WIDTH) / 2,
+        LCD_WIDTH,
+        (ILI9225_SCREEN_HEIGHT - LCD_HEIGHT) / 2,
+        LCD_HEIGHT
+    );
     DBG_INFO("LCD ");
-#endif
-
-#if ENABLE_SOUND
-    // Initialize audio emulation
-    audio_init(&apu_ctx);
-
-    DBG_INFO("AUDIO ");
 #endif
 
 #if ENABLE_SDCARD
@@ -795,18 +724,13 @@ while(true)
     {
         int input;
 
-        gb.gb_frame = 0;
-
-        do {
-            __gb_step_cpu(&gb);
-            tight_loop_contents();
-        } while(HEDLEY_LIKELY(gb.gb_frame == 0));
+        /* Execute CPU cycles until the screen has to be redrawn. */
+        gb_run_frame(&gb);
 
         frames++;
 #if ENABLE_SOUND
         if(!gb.direct.frame_skip) {
-            audio_callback(&apu_ctx, stream);
-            i2s_dma_write(&i2s_config, stream);
+            multicore_fifo_push_blocking_inline(AUDIO_CMD_PLAYBACK);
         }
 #endif
 
@@ -833,11 +757,11 @@ while(true)
 #if ENABLE_SOUND
             if(!gb.direct.joypad_bits.up && prev_joypad_bits.up) {
                 /* select + up: increase sound volume */
-                i2s_increase_volume(&i2s_config);
+                multicore_fifo_push_blocking_inline(AUDIO_CMD_VOLUME_UP);
             }
             if(!gb.direct.joypad_bits.down && prev_joypad_bits.down) {
                 /* select + down: decrease sound volume */
-                i2s_decrease_volume(&i2s_config);
+                multicore_fifo_push_blocking_inline(AUDIO_CMD_VOLUME_DOWN);
             }
 #endif
             if(!gb.direct.joypad_bits.right && prev_joypad_bits.right) {
@@ -886,28 +810,16 @@ while(true)
 
         case 'i':
             invert = !invert;
-            mk_ili9225_display_control(invert, colour);
+            ili9225_display_control(invert, colour);
             break;
 
         case 'f':
             freq++;
             freq &= 0x0F;
-            mk_ili9225_set_drive_freq(freq);
+            ili9225_set_drive_freq(freq);
             DBG_INFO("Freq %u\n", freq);
             break;
 #endif
-        case 'c':
-        {
-            static ili9225_color_mode_e mode = ILI9225_COLOR_MODE_FULL;
-            union core_cmd cmd;
-
-            mode = !mode;
-            cmd.cmd = CORE_CMD_IDLE_SET;
-            cmd.data = mode;
-            multicore_fifo_push_blocking(cmd.full);
-            break;
-        }
-
         case 'i':
             gb.direct.interlace = !gb.direct.interlace;
             break;
@@ -996,9 +908,6 @@ while(true)
 
 out:
     DBG_INFO("\nEmulation Ended");
-
-    /* stop lcd task running on core 1 */
-    multicore_reset_core1();
 
 }
 
